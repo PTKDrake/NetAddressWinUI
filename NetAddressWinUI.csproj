@@ -6,8 +6,8 @@
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>NetAddressWinUI</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Platforms>x64;x86;ARM64</Platforms>
-    <RuntimeIdentifiers>win-x64;win-x86;win-arm64</RuntimeIdentifiers>
+    <Platforms>x64</Platforms>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
     <EnableMsixTooling>true</EnableMsixTooling>
@@ -15,7 +15,7 @@
     <TrimMode>partial</TrimMode>
     <ImplicitUsings>true</ImplicitUsings>
     <LangVersion>Latest</LangVersion>
-    <WindowsAppSDKSelfContained Condition="'$(Platform)' == 'x64' or '$(Platform)' == 'x86' or '$(Platform)' == 'ARM64'">true</WindowsAppSDKSelfContained>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <IsAotCompatible>False</IsAotCompatible>
     <WindowsPackageType>None</WindowsPackageType>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
@@ -110,12 +110,7 @@
   <PropertyGroup Condition="'$(WindowsPackageType)' != 'None'">
 	  <DefineConstants>$(DefineConstants);IS_PACKAGED</DefineConstants>
   </PropertyGroup>
-  
-  <!-- Default platform configuration for WindowsAppSDK -->
-  <PropertyGroup Condition="'$(Platform)' == '' or '$(Platform)' == 'AnyCPU'">
-    <Platform>x64</Platform>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-  </PropertyGroup>
+
   <Target Name="TransformAllT4Templates" BeforeTargets="BeforeBuild">
     <ItemGroup>
       <!-- This picks up all T4 templates in the project -->

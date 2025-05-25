@@ -96,7 +96,7 @@ public partial class HomeViewModel : ObservableObject
             }
         }
 
-        NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces().All(e => e.OperationalStatus == OperationalStatus.Up && e.NetworkInterfaceType != NetworkInterfaceType.Loopback);
+        NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces().Where(e => e.OperationalStatus == OperationalStatus.Up && e.NetworkInterfaceType != NetworkInterfaceType.Loopback).ToArray();
         Debug.WriteLine(JsonConvert.SerializeObject(adapters.Select(e => e.GetPhysicalAddress().ToString()).Cast<String>()));
         foreach (var adapter in adapters)
         {
