@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "NetAddressWinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "NetAddressWinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

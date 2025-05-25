@@ -1,0 +1,22 @@
+﻿{
+  "$schema": "https://raw.githubusercontent.com/Ghost1372/DevWinUI/refs/heads/main/AppData.Schema.json",
+  "Groups": [
+    {
+      "UniqueId": "NetAddressWinUI",
+      "Title": "NetAddressWinUI",
+      "ImagePath": "ms-appx:///Assets/AppIcon.png",
+      "IsSpecialSection": false,
+      "ShowItemsWithoutGroup": true,
+      "IsExpanded": false,
+      "Items": [
+        {
+          "UniqueId": "NetAddressWinUI.Views.HomePage",
+          "Title": "NetAddressWinUI",
+          "Subtitle": "NetAddressWinUI",
+          "ImagePath": "ms-appx:///Assets/AppIcon.png",
+          "HideItem": true
+        }
+      ]
+    }
+  ]
+}
