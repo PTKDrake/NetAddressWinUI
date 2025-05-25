@@ -1,0 +1,11 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+A WinUI 3 project with Windows App SDK.
+
+Following structure of CommunityToolkit.Mvvm.
+
+
+Prefer using DevWinUI classes, controls, styles, codes.
