@@ -14,15 +14,16 @@ public partial class AccountSettingViewModel: ObservableObject
 
     public async Task UpdateData()
     {
-        var user = (await App.GetService<IAuthService>().GetSessionContext())?.user;
+        var sessionContext = await App.GetService<IAuthService>().GetSessionContext();
+        var user = sessionContext?.User;
         if (user != null)
         {
             _dispatcherQueue.TryEnqueue(() =>
             {
-                Email = user.email;
-                LastName = user.lastName;
-                FirstName = user.firstName;
-                UserId = user.id;
+                Email = user.Email;
+                LastName = user.Name; // Using Name as LastName since there's no separate LastName
+                FirstName = user.Name; // Using Name as FirstName since there's no separate FirstName
+                UserId = user.Id;
             });
         }
         else

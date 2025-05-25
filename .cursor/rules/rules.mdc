@@ -7,5 +7,6 @@ A WinUI 3 project with Windows App SDK.
 
 Following structure of CommunityToolkit.Mvvm.
 
+Ignore warning: "Naming rule violation: These words must begin with upper case characters" of Models's properties.
 
 Prefer using DevWinUI classes, controls, styles, codes.

@@ -1,78 +1,50 @@
 ﻿using System.Diagnostics;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Text;
+using NetAddressWinUI.Models;
+using NetAddressWinUI.Services;
 
 namespace NetAddressWinUI.Service;
 
 public partial class AuthService : IAuthService
 {
-    private readonly HttpClient _httpClient = new();
+    private readonly IHttpService _httpService;
 
-    public AuthService()
+    public AuthService(IHttpService httpService)
     {
-        _httpClient.DefaultRequestHeaders.Accept.Clear();
-        _httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-    }
-
-    private void SetBearerToken(string token)
-    {
-        // Xóa token cũ nếu có
-        _httpClient.DefaultRequestHeaders.Authorization = null;
-
-        // Thêm Bearer token vào header
-        if (!string.IsNullOrEmpty(token))
-        {
-            _httpClient.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", token);
-        }
+        _httpService = httpService;
     }
 
     public async Task Logout()
     {
-        SetBearerToken(Settings.Token);
-        var data = new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(new Dictionary<string, string>()
+        try
         {
-            { "token", Settings.Token }
-        }), Encoding.UTF8, "application/json");
-        var response = await _httpClient.PostAsync($"{Settings.ApiUrl}/auth/revoke-session", data);
-        if (response.IsSuccessStatusCode)
-        {
-            return;
+            _httpService.SetBearerToken(Settings.Token);
+            var logoutRequest = new LogoutRequest { Token = Settings.Token ?? string.Empty };
+            var success = await _httpService.PostAsync("/auth/revoke-session", logoutRequest);
+            
+            if (!success)
+            {
+                throw new Exception("Logout error!");
+            }
         }
-        else
+        finally
         {
-            Debug.WriteLine(await response.Content.ReadAsStringAsync());
+            Settings.Token = null;
+            Settings.UserId = null;
         }
-
-        Settings.Token = null;
-        Settings.UserId = null;
-
-        throw new Exception("Logout error!");
     }
 
-    public async Task<SessionContext?> GetSessionContext()
+    public async Task<NetAddressWinUI.Models.SessionContext?> GetSessionContext()
     {
-        SetBearerToken(Settings.Token);
-        var response = await _httpClient.GetAsync($"{Settings.ApiUrl}/auth/get-session");
-        if (response.IsSuccessStatusCode)
+        try
         {
-            if (await response.Content.ReadAsStringAsync() != "null")
-            {
-                var Context = Newtonsoft.Json.JsonConvert.DeserializeObject<SessionContext>(await response.Content.ReadAsStringAsync());
-                return Context;
-            }
-            else
-            {
-                Debug.WriteLine("wrong token");
-            }
+            _httpService.SetBearerToken(Settings.Token);
+            return await _httpService.GetAsync<NetAddressWinUI.Models.SessionContext>("/auth/get-session");
         }
-        else
+        catch (Exception ex)
         {
-            Debug.WriteLine(await response.Content.ReadAsStringAsync());
+            Debug.WriteLine($"Error getting session context: {ex.Message}");
+            return null;
         }
-
-        return null;
     }
 
     public async Task<bool> ValidateToken()

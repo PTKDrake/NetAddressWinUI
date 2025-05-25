@@ -7,6 +7,7 @@ using Windows.System;
 using Microsoft.Windows.AppLifecycle;
 using Microsoft.UI.Xaml;
 using NetAddressWinUI.Service;
+using NetAddressWinUI.Services;
 using WinRT.Interop;
 using WinUIEx;
 
@@ -54,11 +55,16 @@ namespace NetAddressWinUI
         private static IServiceProvider ConfigureServices()
         {
             var services = new ServiceCollection();
+            
+            // Core services
+            services.AddSingleton<IHttpService, HttpService>();
             services.AddSingleton<IThemeService, ThemeService>();
             services.AddSingleton<IJsonNavigationService, JsonNavigationService>();
             services.AddSingleton<IAuthService, AuthService>();
             services.AddSingleton<IWebSocketService, WebSocketService>();
+            services.AddSingleton<IHardwareInfoService, HardwareInfoService>();
 
+            // ViewModels
             services.AddTransient<MainViewModel>();
             services.AddTransient<HomeViewModel>();
             services.AddTransient<GeneralSettingViewModel>();

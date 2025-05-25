@@ -10,9 +10,9 @@ namespace NetAddressWinUI.Common
 
         private string fileName { get; set; } = Constants.AppConfigPath;
         private bool useTrayIcon { get; set; } = true;
-        private string webUrl { get; set; } = "http://pc.mcmevn.com:3000";
-        private string apiUrl { get; set; } = "http://pc.mcmevn.com:3000/api";
-        private string webSocketUrl { get; set; } = "ws://pc.mcmevn.com:3000/api/websocket";
+        private string webUrl { get; set; } = "http://localhost:3000";
+        private string apiUrl { get; set; } = "http://localhost:3000/api";
+        private string webSocketUrl { get; set; } = "ws://localhost:3000/api/websocket";
         private string? token { get; set; } = null;
         private string? userId { get; set; } = null;
         private string redirectionProtocol { get; set; } = @"netaddress";

@@ -1,14 +1,43 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
 using System.Net;
-using System.Net.Http.Json;
-using System.Text;
+using NetAddressWinUI.Models;
+using NetAddressWinUI.Service;
+using NetAddressWinUI.Services;
+using Newtonsoft.Json;
 
 namespace NetAddressWinUI.ViewModels;
 
 public partial class LoginViewModel : ObservableValidator
 {
-    private readonly HttpClient _httpClient = new();
+    private readonly IHttpService _httpService;
+    private readonly IAuthService _authService;
+
+    public LoginViewModel(IHttpService httpService, IAuthService authService)
+    {
+        _httpService = httpService;
+        _authService = authService;
+        
+        // Debug current settings
+        Debug.WriteLine($"LoginViewModel: Current API URL = {Settings.ApiUrl}");
+        Debug.WriteLine($"LoginViewModel: Current Web URL = {Settings.WebUrl}");
+        Debug.WriteLine($"LoginViewModel: Current WebSocket URL = {Settings.WebSocketUrl}");
+        
+        // Force correct API URL if needed
+        if (!Settings.ApiUrl.Contains("/api"))
+        {
+            Debug.WriteLine("LoginViewModel: Fixing API URL - adding /api suffix");
+            Settings.ApiUrl = Settings.ApiUrl.TrimEnd('/') + "/api";
+            Debug.WriteLine($"LoginViewModel: Updated API URL = {Settings.ApiUrl}");
+        }
+        
+        // Test API connection on startup
+        Task.Run(async () =>
+        {
+            var connectionTest = await _httpService.TestConnectionAsync();
+            Debug.WriteLine($"API Connection test result: {connectionTest}");
+        });
+    }
 
     [ObservableProperty] [NotifyDataErrorInfo] [Required(ErrorMessage = "Email cannot be blank.")]
     private string email;
@@ -24,7 +53,7 @@ public partial class LoginViewModel : ObservableValidator
     [ObservableProperty] private bool unauth = true;
 
     public AuthFailContent? AuthFailContent = null;
-    public SessionContext? SessionContext = null;
+    public NetAddressWinUI.Models.SessionContext? SessionContext = null;
 
     public async Task LoginWithGoogle()
     {
@@ -35,60 +64,72 @@ public partial class LoginViewModel : ObservableValidator
             {
                 SocialAuthContent authContent = new()
                 {
-                    idToken = new()
+                    IdToken = new()
                     {
-                        accessToken = authResult.AccessToken,
-                        token = authResult.IdToken,
-                        refreshToken = authResult.RefreshToken,
-                        nonce = "PTKDrakeizdabezt"
+                        AccessToken = authResult.AccessToken,
+                        Token = authResult.IdToken,
+                        RefreshToken = authResult.RefreshToken,
+                        Nonce = "PTKDrakeizdabezt"
                     }
                 };
 
-                var content = new StringContent(Newtonsoft.Json.JsonConvert.SerializeObject(authContent), Encoding.UTF8,
-                    "application/json");
-                var response = await _httpClient.PostAsync($"{Settings.ApiUrl}/auth/sign-in/social", content);
-                if (response.IsSuccessStatusCode)
-                {
-                    SaveSession(await response.Content.ReadAsStringAsync());
-                }
-                else await HandleAuthFail(response);
+                var sessionData = await _httpService.PostAsStringAsync("/auth/sign-in/social", authContent);
+                SaveSession(sessionData);
             }
+            else
+            {
+                AuthFail(new()
+                {
+                    Code = "AUTH_FAILED",
+                    Message = "Failed to get authentication tokens from Google"
+                });
+            }
+        }
+        catch (HttpRequestException httpEx)
+        {
+            Debug.WriteLine($"HTTP Error: {httpEx.Message}");
+            AuthFail(new()
+            {
+                Code = "HTTP_ERROR",
+                Message = $"Server communication error: {httpEx.Message}"
+            });
+        }
+        catch (JsonException jsonEx)
+        {
+            Debug.WriteLine($"JSON Error: {jsonEx.Message}");
+            AuthFail(new()
+            {
+                Code = "JSON_ERROR",
+                Message = "Server returned invalid response format"
+            });
         }
         catch (Exception ex)
         {
-            Debug.WriteLine(ex.Message);
+            Debug.WriteLine($"General Error: {ex.Message}");
             AuthFail(new()
             {
-                code = "UNKNOWN",
-                message = ex.Message
+                Code = "UNKNOWN",
+                Message = ex.Message
             });
         }
     }
 
     public async Task LoginWithEmailPassword()
     {
-        var response =
-            await _httpClient.PostAsJsonAsync($"{Settings.ApiUrl}/auth/sign-in/email", new { email, password });
-        if (response.IsSuccessStatusCode)
+        try
         {
-            SaveSession(await response.Content.ReadAsStringAsync());
+            var loginRequest = new LoginRequest { Email = email, Password = password };
+            var sessionData = await _httpService.PostAsStringAsync("/auth/sign-in/email", loginRequest);
+            SaveSession(sessionData);
         }
-        else await HandleAuthFail(response);
-    }
-
-    private async Task HandleAuthFail(HttpResponseMessage response)
-    {
-        if (response.StatusCode == HttpStatusCode.NotFound)
+        catch (Exception ex)
         {
-            AuthFail(new ()
+            Debug.WriteLine(ex.Message);
+            AuthFail(new AuthFailContent
             {
-                code = "NOT_FOUND",
-                message = "Server error! Please try later."
+                Code = "ERROR",
+                Message = ex.Message
             });
-        }
-        else
-        {
-            AuthFail(await response.Content.ReadFromJsonAsync<AuthFailContent>());
         }
     }
 
@@ -129,48 +170,19 @@ public partial class LoginViewModel : ObservableValidator
 
     private void SaveSession(string stringContext)
     {
-        AuthFailContent = null;
-        SessionContext = Newtonsoft.Json.JsonConvert.DeserializeObject<SessionContext>(stringContext);
-        Settings.Token = SessionContext.token;
-        Settings.UserId = SessionContext.user.id;
-        Unauth = false;
+        try
+        {
+            AuthFailContent = null;
+            SessionContext = JsonConvert.DeserializeObject<NetAddressWinUI.Models.SessionContext>(stringContext);
+            Settings.Token = SessionContext?.Token;
+            Settings.UserId = SessionContext?.User?.Id;
+            Unauth = false;
+        }
+        catch (JsonException ex)
+        {
+            Debug.WriteLine($"Failed to parse session response: {ex.Message}");
+            Debug.WriteLine($"Response content: {stringContext}");
+            throw new JsonException("Failed to parse authentication response from server", ex);
+        }
     }
-}
-
-public class SocialAuthContent
-{
-    public string provider = "google";
-    public IdToken idToken;
-}
-
-public class IdToken
-{
-    public string token = "";
-    public string accessToken = "";
-    public string refreshToken = "";
-    public string nonce = "";
-}
-
-public class AuthFailContent
-{
-    public string code;
-    public string message;
-}
-
-public class SessionContext
-{
-    public bool redirect;
-    public string token;
-    public User user = new ();
-}
-
-public class User
-{
-    public string id;
-    public string email;
-    public string name;
-    public string image;
-    public bool emailVerified;
-    public string createdAt;
-    public string updatedAt;
 }

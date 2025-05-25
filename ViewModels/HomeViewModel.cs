@@ -4,6 +4,8 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using Windows.System;
 using NetAddressWinUI.Service;
+using NetAddressWinUI.Services;
+using NetAddressWinUI.Models;
 using Newtonsoft.Json;
 using Microsoft.UI.Xaml;
 
@@ -12,25 +14,51 @@ namespace NetAddressWinUI.ViewModels;
 public partial class HomeViewModel : ObservableObject
 {
     public string MachineName => Environment.MachineName;
-    public string IpAddresses;
-    public string MacAddresses;
-    public string IpAddress;
-    public string MacAddress;
-    [ObservableProperty] private bool connected = false;
+    
+    [ObservableProperty]
+    private string ipAddresses;
+    
+    [ObservableProperty]
+    private string macAddresses;
+    
+    [ObservableProperty]
+    private string ipAddress;
+    
+    [ObservableProperty]
+    private string macAddress;
+    
+    [ObservableProperty] 
+    private bool connected = false;
+    
+    [ObservableProperty]
+    private HardwareInfo hardwareInfo = new();
+    
+    [ObservableProperty]
+    private string lastUpdateTime = "Never";
+    
+    public string FormattedUptime => FormatUptime(HardwareInfo.os.uptime);
+    
+    partial void OnHardwareInfoChanged(HardwareInfo value)
+    {
+        OnPropertyChanged(nameof(FormattedUptime));
+    }
+    
     private readonly IWebSocketService _webSocketService;
+    private readonly IHardwareInfoService _hardwareInfoService;
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
+    private readonly DispatcherTimer _hardwareUpdateTimer = new();
 
-
-    public HomeViewModel()
+    public HomeViewModel(IWebSocketService webSocketService, IHardwareInfoService hardwareInfoService)
     {
         Debug.WriteLine(App.Hwnd.ToString());
-        _webSocketService = App.GetService<IWebSocketService>();
+        _webSocketService = webSocketService;
+        _hardwareInfoService = hardwareInfoService;
         _webSocketService.MessageReceived += (sender, s) =>
         {
-            var json = JsonConvert.DeserializeObject<WSMessage>(s);
-            if (json.messageType == "info")
+            var json = JsonConvert.DeserializeObject<NetAddressWinUI.Models.WSMessage>(s);
+            if (json.MessageType == "info")
             {
-                if (json.message == "registered")
+                if (json.Message == "registered")
                 {
                     _dispatcherQueue?.TryEnqueue(() =>
                     {
@@ -39,7 +67,7 @@ public partial class HomeViewModel : ObservableObject
                     });
                 } else
 
-                if (json.message == "disconnected")
+                if (json.Message == "disconnected")
                 {
                     _dispatcherQueue?.TryEnqueue(() =>
                     {
@@ -48,18 +76,27 @@ public partial class HomeViewModel : ObservableObject
                     });
                 } else
 
-                if (json.message == "connected")
+                if (json.Message == "connected")
                 {
                     _dispatcherQueue?.TryEnqueue(() =>
                     {
                         Connected = true;
                         Growl.SuccessGlobal("Connected", "Connected to the server!");
                     });
+                } else
+
+                if (json.Message == "updated")
+                {
+                    _dispatcherQueue?.TryEnqueue(() =>
+                    {
+                        // Không hiển thị notification cho update để tránh spam
+                        Debug.WriteLine("Hardware information updated successfully");
+                    });
                 }
             }
-            else if (json.messageType == "command")
+            else if (json.MessageType == "command")
             {
-                if (json.message == "shutdown")
+                if (json.Message == "shutdown")
                 {
                     _dispatcherQueue?.TryEnqueue(() =>
                     {
@@ -96,7 +133,7 @@ public partial class HomeViewModel : ObservableObject
             }
         }
 
-        NetworkInterface[] adapters = NetworkInterface.GetAllNetworkInterfaces().Where(e => e.OperationalStatus == OperationalStatus.Up && e.NetworkInterfaceType != NetworkInterfaceType.Loopback).ToArray();
+        System.Net.NetworkInformation.NetworkInterface[] adapters = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().Where(e => e.OperationalStatus == OperationalStatus.Up && e.NetworkInterfaceType != NetworkInterfaceType.Loopback).ToArray();
         Debug.WriteLine(JsonConvert.SerializeObject(adapters.Select(e => e.GetPhysicalAddress().ToString()).Cast<String>()));
         foreach (var adapter in adapters)
         {
@@ -109,6 +146,90 @@ public partial class HomeViewModel : ObservableObject
                 break;
             }
         }
+        
+        // Initialize hardware information updates
+        InitializeHardwareUpdates();
+    }
+    
+    private void InitializeHardwareUpdates()
+    {
+        // Load hardware info immediately on startup for faster display
+        Task.Run(async () =>
+        {
+            try
+            {
+                var initialHardwareInfo = await _hardwareInfoService.GetHardwareInfoAsync();
+                _dispatcherQueue?.TryEnqueue(() =>
+                {
+                    HardwareInfo = initialHardwareInfo;
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error loading initial hardware info: {ex.Message}");
+            }
+        });
+        
+        // Set up timer for regular updates (every 5 seconds for UI, every 30 seconds for server)
+        _hardwareUpdateTimer.Interval = TimeSpan.FromSeconds(5);
+        _hardwareUpdateTimer.Tick += (sender, e) => {
+            LoadHardwareInfo();
+            SendHardwareUpdate();
+        };
+        _hardwareUpdateTimer.Start();
+    }
+    
+    private async void LoadHardwareInfo()
+    {
+        try
+        {
+            var newHardwareInfo = await _hardwareInfoService.GetHardwareInfoAsync();
+            
+            // Update on UI thread
+            _dispatcherQueue?.TryEnqueue(() =>
+            {
+                HardwareInfo = newHardwareInfo;
+            });
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error loading hardware info: {ex.Message}");
+        }
+    }
+    
+    private async void SendHardwareUpdate()
+    {
+        // Only send updates if connected to server
+        if (!Connected) return;
+        
+        try
+        {
+            // Get latest hardware information
+            var hardwareInfo = HardwareInfo;
+            
+            var updateMessage = new UpdateMessage
+            {
+                messageType = "update",
+                macAddress = MacAddress,
+                ipAddress = IpAddress,
+                machineName = MachineName,
+                hardware = hardwareInfo
+            };
+            
+            await _webSocketService.SendMessageAsync(updateMessage);
+            
+            // Update last update time on UI thread
+            _dispatcherQueue?.TryEnqueue(() =>
+            {
+                LastUpdateTime = DateTime.Now.ToString("HH:mm:ss dd/MM/yyyy");
+            });
+            
+            Debug.WriteLine("Hardware update sent to server");
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error sending hardware update: {ex.Message}");
+        }
     }
 
     [RelayCommand]
@@ -118,16 +239,23 @@ public partial class HomeViewModel : ObservableObject
         {
             await _webSocketService.ConnectAsync(new Uri(Settings.WebSocketUrl), CancellationToken.None);
 
-            var data = new Dictionary<string, string>()
+            // Get hardware information
+            var hardwareInfo = await _hardwareInfoService.GetHardwareInfoAsync();
+
+            var registerMessage = new RegisterMessage
             {
-                { "messageType", "register" },
-                { "userId", Settings.UserId },
-                { "machineName", MachineName },
-                { "ipAddress", IpAddress },
-                { "macAddress", MacAddress },
-                {"test", "1234"}
+                messageType = "register",
+                userId = Settings.UserId,
+                machineName = MachineName,
+                ipAddress = IpAddress,
+                macAddress = MacAddress,
+                hardware = hardwareInfo
             };
-            await _webSocketService.SendMessageAsync(data);
+
+            await _webSocketService.SendMessageAsync(registerMessage);
+            
+            // Update last update time when registering
+            LastUpdateTime = DateTime.Now.ToString("HH:mm:ss dd/MM/yyyy");
         }
         catch (Exception ex)
         {
@@ -141,12 +269,14 @@ public partial class HomeViewModel : ObservableObject
         try
         {
             await _webSocketService.ConnectAsync(new Uri(Settings.WebSocketUrl), CancellationToken.None);
-            var data = new Dictionary<string, string>()
+            
+            var disconnectMessage = new DisconnectMessage
             {
-                { "messageType", "disconnect" },
-                { "macAddress", MacAddress }
+                messageType = "disconnect",
+                macAddress = MacAddress
             };
-            await _webSocketService.SendMessageAsync(data);
+            
+            await _webSocketService.SendMessageAsync(disconnectMessage);
         }
         catch (Exception ex)
         {
@@ -159,16 +289,48 @@ public partial class HomeViewModel : ObservableObject
         try
         {
             await _webSocketService.ConnectAsync(new Uri(Settings.WebSocketUrl), CancellationToken.None);
-            var data = new Dictionary<string, string>()
+            
+            var shutdownMessage = new ShutdownMessage
             {
-                { "messageType", "shutdown" },
-                { "macAddress", MacAddress }
+                messageType = "shutdown",
+                macAddress = MacAddress
             };
-            await _webSocketService.SendMessageAsync(data);
+            
+            await _webSocketService.SendMessageAsync(shutdownMessage);
         }
         catch (Exception ex)
         {
             Debug.WriteLine(ex.Message);
         }
+    }
+    
+    private string FormatUptime(long uptimeSeconds)
+    {
+        if (uptimeSeconds <= 0) return "0m";
+        
+        var timeSpan = TimeSpan.FromSeconds(uptimeSeconds);
+        
+        var days = timeSpan.Days;
+        var hours = timeSpan.Hours;
+        var minutes = timeSpan.Minutes;
+        
+        var parts = new List<string>();
+        
+        if (days > 0)
+            parts.Add($"{days}d");
+        if (hours > 0)
+            parts.Add($"{hours}h");
+        if (minutes > 0 || parts.Count == 0)
+            parts.Add($"{minutes}m");
+            
+        return string.Join(" ", parts);
+    }
+    
+    public void StopHardwareUpdates()
+    {
+        _hardwareUpdateTimer?.Stop();
+        
+        // Cleanup hardware service resources
+        NetAddressWinUI.Services.HardwareInfoService.Cleanup();
     }
 }

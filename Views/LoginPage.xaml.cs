@@ -10,7 +10,7 @@ public partial class LoginPage : Page
     public LoginPage()
     {
         InitializeComponent();
-        ViewModel = new LoginViewModel();
+        ViewModel = App.GetService<LoginViewModel>();
         DataContext = ViewModel;
         ViewModel.Email = "";
         ViewModel.Password = "";
@@ -27,11 +27,11 @@ public partial class LoginPage : Page
             await ViewModel.LoginWithEmailPassword();
             if (ViewModel.Unauth)
             {
-                Growl.ErrorGlobal("Login failed!", ViewModel.AuthFailContent?.message ?? "Unknown error.");
+                Growl.ErrorGlobal("Login failed!", ViewModel.AuthFailContent?.Message ?? "Unknown error.");
             }
             else
             {
-                Growl.SuccessGlobal("Login success!", $"Wellcome, {ViewModel.SessionContext.user.name}.");
+                Growl.SuccessGlobal("Login success!", $"Wellcome, {ViewModel.SessionContext?.User?.Name}.");
                 App.MainWindow.ShowUpComponents();
             }
 
@@ -46,11 +46,11 @@ public partial class LoginPage : Page
         await ViewModel.LoginWithGoogle();
         if (ViewModel.Unauth)
         {
-            Growl.ErrorGlobal("Login failed!", ViewModel.AuthFailContent?.message ?? "Unknown error.");
+            Growl.ErrorGlobal("Login failed!", ViewModel.AuthFailContent?.Message ?? "Unknown error.");
         }
         else
         {
-            Growl.SuccessGlobal("Login success!", $"Wellcome, {ViewModel.SessionContext.user.name}.");
+            Growl.SuccessGlobal("Login success!", $"Wellcome, {ViewModel.SessionContext?.User?.Name}.");
             App.MainWindow.ShowUpComponents();
         }
 
