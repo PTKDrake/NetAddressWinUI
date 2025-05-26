@@ -45,14 +45,16 @@ public partial class HomeViewModel : ObservableObject
     
     private readonly IWebSocketService _webSocketService;
     private readonly IHardwareInfoService _hardwareInfoService;
+    private readonly IHttpService _httpService;
     private readonly DispatcherQueue _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
     private readonly DispatcherTimer _hardwareUpdateTimer = new();
 
-    public HomeViewModel(IWebSocketService webSocketService, IHardwareInfoService hardwareInfoService)
+    public HomeViewModel(IWebSocketService webSocketService, IHardwareInfoService hardwareInfoService, IHttpService httpService)
     {
         Debug.WriteLine(App.Hwnd.ToString());
         _webSocketService = webSocketService;
         _hardwareInfoService = hardwareInfoService;
+        _httpService = httpService;
         _webSocketService.MessageReceived += (sender, s) =>
         {
             var json = JsonConvert.DeserializeObject<NetAddressWinUI.Models.WSMessage>(s);
@@ -122,16 +124,43 @@ public partial class HomeViewModel : ObservableObject
             }
         };
 
-        IPAddress[] addresses = Dns.GetHostAddresses(Dns.GetHostName());
-        Debug.WriteLine(JsonConvert.SerializeObject(addresses.Select(e => e.ToString()).Cast<String>()));
-        foreach (var address in addresses)
+        // Initialize IP address asynchronously to get public IP
+        Task.Run(async () =>
         {
-            if (address.AddressFamily == AddressFamily.InterNetwork)
+            try
             {
-                IpAddress = address.ToString();
-                break;
+                // Try to get public IP address first
+                var publicIp = await _httpService.GetPublicIpAddressAsync();
+                if (!string.IsNullOrEmpty(publicIp))
+                {
+                    _dispatcherQueue?.TryEnqueue(() =>
+                    {
+                        IpAddress = publicIp;
+                        Debug.WriteLine($"Public IP address obtained: {publicIp}");
+                    });
+                }
+                else
+                {
+                    // Fallback to local IP if public IP fails
+                    var localIp = GetLocalIpAddress();
+                    _dispatcherQueue?.TryEnqueue(() =>
+                    {
+                        IpAddress = localIp ?? "Unknown";
+                        Debug.WriteLine($"Using local IP address: {localIp}");
+                    });
+                }
             }
-        }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error getting IP address: {ex.Message}");
+                // Fallback to local IP
+                var localIp = GetLocalIpAddress();
+                _dispatcherQueue?.TryEnqueue(() =>
+                {
+                    IpAddress = localIp ?? "Unknown";
+                });
+            }
+        });
 
         System.Net.NetworkInformation.NetworkInterface[] adapters = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces().Where(e => e.OperationalStatus == OperationalStatus.Up && e.NetworkInterfaceType != NetworkInterfaceType.Loopback).ToArray();
         Debug.WriteLine(JsonConvert.SerializeObject(adapters.Select(e => e.GetPhysicalAddress().ToString()).Cast<String>()));
@@ -204,6 +233,12 @@ public partial class HomeViewModel : ObservableObject
         
         try
         {
+            // Refresh IP address periodically (every 10 updates = ~5 minutes)
+            if (DateTime.Now.Minute % 5 == 0)
+            {
+                await RefreshIpAddress();
+            }
+            
             // Get latest hardware information
             var hardwareInfo = HardwareInfo;
             
@@ -284,6 +319,19 @@ public partial class HomeViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    public async Task RefreshIp()
+    {
+        try
+        {
+            await RefreshIpAddress();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error refreshing IP: {ex.Message}");
+        }
+    }
+
     private async Task Shutdown()
     {
         try
@@ -332,5 +380,47 @@ public partial class HomeViewModel : ObservableObject
         
         // Cleanup hardware service resources
         NetAddressWinUI.Services.HardwareInfoService.Cleanup();
+    }
+
+    private async Task RefreshIpAddress()
+    {
+        try
+        {
+            var publicIp = await _httpService.GetPublicIpAddressAsync();
+            if (!string.IsNullOrEmpty(publicIp) && publicIp != IpAddress)
+            {
+                _dispatcherQueue?.TryEnqueue(() =>
+                {
+                    IpAddress = publicIp;
+                    Debug.WriteLine($"IP address updated to: {publicIp}");
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error refreshing IP address: {ex.Message}");
+        }
+    }
+
+    private string? GetLocalIpAddress()
+    {
+        try
+        {
+            IPAddress[] addresses = Dns.GetHostAddresses(Dns.GetHostName());
+            foreach (var address in addresses)
+            {
+                if (address.AddressFamily == AddressFamily.InterNetwork &&
+                    !IPAddress.IsLoopback(address))
+                {
+                    return address.ToString();
+                }
+            }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error getting local IP: {ex.Message}");
+            return null;
+        }
     }
 }

@@ -93,7 +93,14 @@
                             </StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="IP:" Style="{StaticResource InfoLabelStyle}" Width="60"/>
-                                <TextBlock Text="{x:Bind ViewModel.IpAddress}" Style="{StaticResource InfoValueStyle}"/>
+                                <TextBlock Text="{x:Bind ViewModel.IpAddress, Mode=OneWay}" Style="{StaticResource InfoValueStyle}" Margin="0,0,8,0"/>
+                                <Button Content="🔄" 
+                                        FontSize="12" 
+                                        Padding="4" 
+                                        MinWidth="24" 
+                                        MinHeight="24"
+                                        Command="{x:Bind ViewModel.RefreshIpCommand}"
+                                        ToolTipService.ToolTip="Refresh Public IP Address"/>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <TextBlock Text="MAC:" Style="{StaticResource InfoLabelStyle}" Width="60"/>
@@ -140,6 +147,9 @@
                                 HorizontalAlignment="Stretch"
                                 IsEnabled="{x:Bind ViewModel.Connected, Mode=OneWay}"
                                 Command="{x:Bind ViewModel.DisconnectCommand}"/>
+                        <Button Content="Refresh IP"
+                                HorizontalAlignment="Stretch"
+                                Command="{x:Bind ViewModel.RefreshIpCommand}"/>
                     </StackPanel>
                 </Border>
             </Grid>

@@ -12,6 +12,7 @@ public interface IHttpService
     void SetBearerToken(string? token);
     void SetBaseAddress(string baseUrl);
     Task<bool> TestConnectionAsync();
+    Task<string?> GetPublicIpAddressAsync();
 }
 
 public class ApiResponse<T>

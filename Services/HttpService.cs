@@ -203,6 +203,77 @@ public class HttpService : IHttpService, IDisposable
         }
     }
 
+    public async Task<string?> GetPublicIpAddressAsync()
+    {
+        try
+        {
+            // List of reliable public IP services with fallbacks
+            var ipServices = new[]
+            {
+                "https://api.ipify.org",
+                "https://icanhazip.com",
+                "https://ipinfo.io/ip",
+                "https://checkip.amazonaws.com",
+                "https://api.my-ip.io/ip"
+            };
+
+            using var httpClient = new HttpClient();
+            httpClient.Timeout = TimeSpan.FromSeconds(10); // 10 second timeout
+
+            foreach (var service in ipServices)
+            {
+                try
+                {
+                    var response = await httpClient.GetStringAsync(service);
+                    var ip = response.Trim();
+                    
+                    // Validate IP address format
+                    if (System.Net.IPAddress.TryParse(ip, out var ipAddress) && 
+                        ipAddress.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                    {
+                        Debug.WriteLine($"Public IP obtained from {service}: {ip}");
+                        return ip;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Failed to get IP from {service}: {ex.Message}");
+                    continue; // Try next service
+                }
+            }
+
+            Debug.WriteLine("All public IP services failed, falling back to local IP");
+            return GetLocalIpAddress();
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error getting public IP: {ex.Message}");
+            return GetLocalIpAddress();
+        }
+    }
+
+    private string? GetLocalIpAddress()
+    {
+        try
+        {
+            var addresses = System.Net.Dns.GetHostAddresses(System.Net.Dns.GetHostName());
+            foreach (var address in addresses)
+            {
+                if (address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork &&
+                    !System.Net.IPAddress.IsLoopback(address))
+                {
+                    return address.ToString();
+                }
+            }
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Error getting local IP: {ex.Message}");
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         Dispose(true);
